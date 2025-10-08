@@ -1,0 +1,11 @@
+customer,FULL_NAME,Customer Data,Personal Information,Full Name
+customer,DATE_OF_BIRTH,Customer Data,Personal Information,Date of Birth
+customer,GENDER,Customer Data,Personal Information,Gender
+customer,ADDRESS,Customer Data,Contact Information,Address
+customer,PHONE_NUMBER,Customer Data,Contact Information,Phone Number
+customer,EMAIL_ADDRESS,Customer Data,Contact Information,Email Address
+customer,NATID,Customer Data,Identifier,National ID
+customer,OCCUPATION,Customer Data,Personal Information,Occupation
+customer,CUSTOMER_TYPE,Customer Data,Classification,Customer Type
+customer,ACCOUNT_NUMBERS,Customer Data,Financial Information,Account Numbers
+customer,AGE,Customer Data,Personal Information,Age
