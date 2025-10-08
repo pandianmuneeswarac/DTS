@@ -1,0 +1,16 @@
+Target Table,Target Column,Source Table,Source Column,Expression,Remarks  
+db2_customer_data,FULL_NAME,vsam_customer_data,FULL_NAME,FULL_NAME,No transformation applied  
+db2_customer_data,DATE_OF_BIRTH,vsam_customer_data,DOB,parseDateUDF(DOB),Date formatted to yyyy-MM-dd  
+db2_customer_data,GENDER,vsam_customer_data,GENDER,GENDER,No transformation applied  
+db2_customer_data,ADDRESS,vsam_customer_data,ADDRESS,ADDRESS,No transformation applied  
+db2_customer_data,PHONE_NUMBER,vsam_customer_data,PHONE,PHONE,No transformation applied  
+db2_customer_data,EMAIL_ADDRESS,vsam_customer_data,EMAIL,EMAIL,No transformation applied  
+db2_customer_data,NATID,vsam_customer_data,NATID,NATID,No transformation applied  
+db2_customer_data,OCCUPATION,vsam_customer_data,OCCUPATION,OCCUPATION,No transformation applied  
+db2_customer_data,CUSTOMER_TYPE,vsam_customer_data,CUSTTYPE,"deriveCustomerTypeUDF(CUSTTYPE, AGE, OCCUPATION)",Derived based on age and occupation  
+db2_customer_data,ACCOUNT_NUMBERS,vsam_customer_data,ACCNUMS,ACCNUMS,No transformation applied  
+db2_customer_data,AGE,vsam_customer_data,DOB,calculateAgeUDF(DOB),Age calculated based on DOB  
+reject_out,FULL_NAME,vsam_customer_data,FULL_NAME,FULL_NAME,No transformation applied  
+reject_out,EMAIL,vsam_customer_data,EMAIL,EMAIL,No transformation applied  
+reject_out,NATID,vsam_customer_data,NATID,NATID,No transformation applied  
+reject_out,REJECT_REASON,vsam_customer_data,DOB,"when(!EMAIL_VALID, 'Invalid email').when(AGE < MinAge, 'Underage').otherwise('Invalid record')",Reject reason derived based on validation criteria
