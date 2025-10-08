@@ -1,0 +1,120 @@
+import org.apache.spark.sql.{SparkSession, DataFrame, SaveMode}
+import org.apache.spark.sql.functions._
+import java.time.{LocalDate, Period}
+import java.time.format.DateTimeFormatter
+
+object CustomerDataProcessor {
+
+  private val MinAge = 18
+  private val LogRejects = true
+  private val DateFormat = DateTimeFormatter.ofPattern("yyyyMMdd")
+
+  private val InputPath = "input/vsam_customer_data.parquet"
+  private val OutputPath = "output/db2_customer_data.parquet"
+  private val RejectPath = "output/reject_out.parquet"
+
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .appName("CustomerDataProcessor")
+      .getOrCreate()
+
+    import spark.implicits._
+
+    val inputDF = spark.read.parquet(InputPath)
+      .select(
+        trim($"FULL_NAME").as("FULL_NAME"),
+        trim($"DOB").as("DOB"),
+        trim($"GENDER").as("GENDER"),
+        trim($"ADDRESS").as("ADDRESS"),
+        trim($"PHONE").as("PHONE"),
+        trim($"EMAIL").as("EMAIL"),
+        trim($"NATID").as("NATID"),
+        trim($"OCCUPATION").as("OCCUPATION"),
+        trim($"CUSTTYPE").as("CUSTTYPE"),
+        trim($"ACCNUMS").as("ACCNUMS")
+      )
+
+    val parseDateUDF = udf { dob: String =>
+      try {
+        if (Option(dob).exists(_.trim.length == 8))
+          LocalDate.parse(dob.trim, DateFormat).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        else null
+      } catch {
+        case _: Exception => null
+      }
+    }
+
+    val calculateAgeUDF = udf { dob: String =>
+      try {
+        if (Option(dob).exists(_.trim.length == 8)) {
+          val birthDate = LocalDate.parse(dob.trim, DateFormat)
+          Period.between(birthDate, LocalDate.now()).getYears
+        } else 0
+      } catch {
+        case _: Exception => 0
+      }
+    }
+
+    val validateEmailUDF = udf { email: String =>
+      Option(email).exists(e => e.contains("@") && e.indexOf('.', e.indexOf('@')) > 0)
+    }
+
+    val deriveCustomerTypeUDF = udf { (custType: String, age: Int, occupation: String) =>
+      val trimmedType = Option(custType).getOrElse("").trim
+      if (trimmedType.nonEmpty) trimmedType
+      else if (age >= 65) "Senior"
+      else if (age >= 25 && Option(occupation).exists(_.toLowerCase.contains("retired"))) "Senior"
+      else if (age >= 25) "Adult"
+      else "Youth"
+    }
+
+    val maskNatIdUDF = udf { natid: String =>
+      val clean = Option(natid).getOrElse("").trim
+      if (clean.isEmpty) "N/A"
+      else if (clean.length <= 4) "****"
+      else "****" + clean.takeRight(4)
+    }
+
+    val processedDF = inputDF
+      .withColumn("DOB_FORMATTED", parseDateUDF($"DOB"))
+      .withColumn("AGE", calculateAgeUDF($"DOB"))
+      .withColumn("EMAIL_VALID", validateEmailUDF($"EMAIL"))
+      .withColumn("CUSTOMER_TYPE", deriveCustomerTypeUDF($"CUSTTYPE", $"AGE", $"OCCUPATION"))
+      .withColumn("MASKED_NATID", maskNatIdUDF($"NATID"))
+
+    val validDF = processedDF
+      .filter($"EMAIL_VALID" && $"AGE" >= MinAge)
+      .select(
+        $"FULL_NAME",
+        $"DOB_FORMATTED".as("DATE_OF_BIRTH"),
+        $"GENDER",
+        $"ADDRESS",
+        $"PHONE".as("PHONE_NUMBER"),
+        $"EMAIL".as("EMAIL_ADDRESS"),
+        $"NATID",
+        $"OCCUPATION",
+        $"CUSTOMER_TYPE",
+        $"ACCNUMS".as("ACCOUNT_NUMBERS"),
+        $"AGE"
+      )
+
+    val rejectDF = processedDF
+      .filter(!$"EMAIL_VALID" || $"AGE" < MinAge)
+      .withColumn(
+        "REJECT_REASON",
+        when(!$"EMAIL_VALID", "Invalid email")
+          .when($"AGE" < MinAge, "Underage")
+          .otherwise("Invalid record")
+      )
+      .select($"FULL_NAME", $"EMAIL", $"NATID", $"REJECT_REASON")
+
+    validDF.write.mode(SaveMode.Overwrite).parquet(OutputPath)
+    if (LogRejects) rejectDF.write.mode(SaveMode.Overwrite).parquet(RejectPath)
+
+    val total = inputDF.count()
+    val rejected = rejectDF.count()
+    println(s"Processing complete. Total: $total, Rejected: $rejected, Loaded: ${total - rejected}")
+
+    spark.stop()
+  }
+}
